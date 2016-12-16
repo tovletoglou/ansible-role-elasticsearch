@@ -1,0 +1,140 @@
+---
+
+- name: Check if we use the corect ({{ elasticsearch_minimum_java_version }}) Java version
+  shell: java -version 2>&1 | awk '/version/{print $NF}' | tr -d '"' | sed 's/_.*//'
+  register: current_version
+  failed_when: current_version.stdout < "{{ elasticsearch_minimum_java_version }}"
+  changed_when: false # This will never report 'changed' status. But it will report 'ok', 'unreachable' or 'failed'.
+
+- name: Import elastic rpm key
+  rpm_key:
+    state: present
+    key: https://packages.elastic.co/GPG-KEY-elasticsearch
+
+- name: Add elastic repository
+  yum_repository:
+    name: elastic-5.x
+    file: elastic
+    description: Elastic repository for 5.x packages
+    baseurl: https://artifacts.elastic.co/packages/5.x/yum
+    gpgcheck: yes
+    gpgkey: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    enabled: yes
+
+- name: Install ElasticSearch and tools
+  yum:
+    pkg: "{{ item }}"
+    state: latest
+  with_items: "{{ elasticsearch_tools }}"
+
+- name: Configure ElasticSearch cluster name
+  replace:
+    dest: /etc/elasticsearch/elasticsearch.yml
+    regexp: "^.*cluster.name.*\n"
+    replace: "cluster.name: {{ elasticsearch_cluster_name }}\n"
+    backup: yes
+  notify: restart elasticsearch
+
+- name: Configure ElasticSearch host
+  replace:
+    dest: /etc/elasticsearch/elasticsearch.yml
+    regexp: "^.*network.host.*\n"
+    replace: "network.host: {{ elasticsearch_host }}\n"
+    backup: yes
+  notify: restart elasticsearch
+
+- name: Configure ElasticSearch port
+  replace:
+    dest: /etc/elasticsearch/elasticsearch.yml
+    regexp: "^.*http.port.*\n"
+    replace: "http.port: {{ elasticsearch_port }}\n"
+    backup: yes
+  notify: restart elasticsearch
+
+- name: Configure Kibana port
+  replace:
+    dest: /etc/kibana/kibana.yml
+    regexp: "^.*server.port.*\n"
+    replace: "server.port: {{ elasticsearch_kibana_port }}\n"
+    backup: yes
+  notify: restart kibana
+
+- name: Configure Kibana host
+  replace:
+    dest: /etc/kibana/kibana.yml
+    regexp: "^.*server.host.*\n"
+    replace: "server.host: {{ elasticsearch_kibana_host }}\n"
+    backup: yes
+  notify: restart kibana
+
+- name: Configure Kibana name
+  replace:
+    dest: /etc/kibana/kibana.yml
+    regexp: "^.*server.name.*\n"
+    replace: "server.name: {{ elasticsearch_kibana_name }}\n"
+    backup: yes
+  notify: restart kibana
+
+- name: Configure Kibana elasticsearch URL
+  replace:
+    dest: /etc/kibana/kibana.yml
+    regexp: "^.*elasticsearch.url.*\n"
+    replace: "elasticsearch.url: {{ elasticsearch_kibana_bind_url }}\n"
+    backup: yes
+  notify: restart kibana
+
+- name: Configure Kibana index
+  replace:
+    dest: /etc/kibana/kibana.yml
+    regexp: "^.*kibana.index.*\n"
+    replace: "kibana.index: {{ elasticsearch_kibana_index }}\n"
+    backup: yes
+  notify: restart kibana
+
+- name: Setup ElasticSearch on boot
+  service:
+    name: elasticsearch
+    enabled: yes
+
+- name: Start the ElasticSearch
+  service:
+    name: elasticsearch
+    state: started
+
+- name: Setup Kibana on boot
+  service:
+    name: kibana
+    enabled: yes
+
+- name: Start the Kibana
+  service:
+    name: kibana
+    state: started
+
+# Manual Installation
+#
+# - name: Check if elasticsearch exists
+#   stat:
+#     path: "{{ elasticsearch_installation_path }}/bin/elasticsearch"
+#   register: elasticsearch_executable
+#
+# - name: download ElasticSearch
+#   get_url:
+#     url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elasticsearch_version }}.tar.gz"
+#     dest: "/tmp"
+#   when: elasticsearch_executable.stat.exists == False
+#
+# - name: Remove elasticsearch-{{ elasticsearch_version }}.tar.gz
+#   file:
+#     path: "/tmp/elasticsearch-{{ elasticsearch_version }}.tar.gz"
+#     state: absent
+#
+# - name: Unzip the archive
+#   unarchive:
+#     src: "/tmp/elasticsearch-{{ elasticsearch_version }}.tar.gz"
+#     dest: "/tmp"
+#   when: elasticsearch_executable.stat.exists == False
+#
+# - name: Move /tmp/elasticsearch-{{ elasticsearch_version }} to {{ elasticsearch_installation_path }}/elasticsearch
+#   command: "mv /tmp/elasticsearch-{{ elasticsearch_version }} {{ elasticsearch_installation_path }}"
+#   when: elasticsearch_executable.stat.exists == False
