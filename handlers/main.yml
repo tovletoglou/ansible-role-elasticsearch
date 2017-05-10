@@ -1,11 +1,13 @@
 ---
 
 - name: restart elasticsearch
+  become: yes
   service:
     name: elasticsearch
     state: restarted
 
 - name: restart kibana
+  become: yes
   service:
     name: kibana
     state: restarted
